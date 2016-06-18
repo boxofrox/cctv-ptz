@@ -180,6 +180,7 @@ func interactive(conf config.Config) {
 	var (
 		record        *os.File
 		tty           *serial.Port
+		jsObserver    <-chan joystick.State
 		err           error
 		serialEnabled = ("/dev/null" != conf.SerialPort)
 	)
@@ -188,17 +189,20 @@ func interactive(conf config.Config) {
 
 	js, err := joystick.Open(conf.JoystickNumber)
 	if err != nil {
-		panic(err)
+		fmt.Fprintf(os.Stderr, "Error opening joystick %d. %s\n", conf.JoystickNumber, err)
+
+		jsObserver = listenNothing()
+	} else {
+		defer js.Close()
+
+		fmt.Fprintf(os.Stderr, "Joystick port opened. /dev/input/js%d\n", conf.JoystickNumber)
+		fmt.Fprintf(os.Stderr, "  Joystick Name: %s\n", js.Name())
+		fmt.Fprintf(os.Stderr, "     Axis Count: %d\n", js.AxisCount())
+		fmt.Fprintf(os.Stderr, "   Button Count: %d\n", js.ButtonCount())
+
+		jsTicker := time.NewTicker(100 * time.Millisecond)
+		jsObserver = listenJoystick(js, jsTicker)
 	}
-	defer js.Close()
-
-	fmt.Fprintf(os.Stderr, "Joystick port opened. /dev/input/js%d\n", conf.JoystickNumber)
-	fmt.Fprintf(os.Stderr, "  Joystick Name: %s\n", js.Name())
-	fmt.Fprintf(os.Stderr, "     Axis Count: %d\n", js.AxisCount())
-	fmt.Fprintf(os.Stderr, "   Button Count: %d\n", js.ButtonCount())
-
-	jsTicker := time.NewTicker(100 * time.Millisecond)
-	jsObserver := listenJoystick(js, jsTicker)
 
 	if serialEnabled {
 		ttyOptions := serial.Options{
@@ -386,6 +390,10 @@ func listenJoystick(js joystick.Joystick, ticker *time.Ticker) <-chan joystick.S
 	}()
 
 	return io
+}
+
+func listenNothing() <-chan joystick.State {
+	return make(chan joystick.State)
 }
 
 func normalizeAxis(state joystick.State, axis Axis) float32 {
