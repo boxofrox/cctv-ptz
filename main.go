@@ -54,7 +54,10 @@ const (
 
 type PelcoDMessage [7]byte
 
-const AxisMax = 32767
+const (
+	AxisMax  = 32767
+	MaxSpeed = 0x22
+)
 
 type Axis struct {
 	Index    int32
@@ -347,7 +350,7 @@ func listenJoystick(js joystick.Joystick, ticker *time.Ticker) <-chan joystick.S
 			} else {
 				io <- state
 			}
-			time.Sleep(100 * time.Millisecond)
+			time.Sleep(25 * time.Millisecond)
 		}
 	}()
 
@@ -415,7 +418,7 @@ func pelcoApplyJoystick(buffer PelcoDMessage, panX, panY, zoom float32, openIris
 	}
 
 	// pan speed
-	buffer[DATA_1] = uint8(float64(0x3F) * math.Abs(float64(panX)))
+	buffer[DATA_1] = uint8(float64(MaxSpeed) * math.Abs(float64(panX)))
 
 	if panY > 0 {
 		buffer[COMMAND_2] |= 1 << 3
@@ -424,7 +427,7 @@ func pelcoApplyJoystick(buffer PelcoDMessage, panX, panY, zoom float32, openIris
 	}
 
 	// tilt speed
-	buffer[DATA_2] = uint8(float64(0x3F) * math.Abs(float64(panY)))
+	buffer[DATA_2] = uint8(float64(MaxSpeed) * math.Abs(float64(panY)))
 
 	if zoom > 0 {
 		buffer[COMMAND_2] |= 1 << 5
