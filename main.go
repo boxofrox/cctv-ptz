@@ -20,11 +20,11 @@ import (
 // Left Analog                  Pan w/ Speed
 //   Up                         Up
 //   Down                       Down
-//   Left                       n/a
-//   Right                      n/a
+//   Left                       (unused)
+//   Right                      (unused)
 // Right Analog
-//   Up                         n/a
-//   Down                       n/a
+//   Up                         (unused)
+//   Down                       (unused)
 //   Left                       Left
 //   Right                      Right
 // A                            Iris Open
@@ -35,6 +35,8 @@ import (
 // Right Bumper                 Zoom In
 // Start                        Menu (Go to Preset 95)
 // Back                         Reset recording start time
+// Left Trigger                 (unused)
+// Right Trigger                (unused)
 
 var (
 	VERSION    string
@@ -86,13 +88,13 @@ var xbox = struct {
 	Back         uint32
 	XBox         uint32
 }{
-	Axis{0, -AxisMax, AxisMax, 8192, false}, // left axis
+	Axis{0, -AxisMax, AxisMax, 8192, false}, // left analog stick
 	Axis{1, -AxisMax, AxisMax, 8192, true},
-	Axis{3, -AxisMax, AxisMax, 8192, false}, // right axis
+	Axis{3, -AxisMax, AxisMax, 8192, false}, // right analog stick
 	Axis{4, -AxisMax, AxisMax, 8192, true},
 	Axis{2, -AxisMax, AxisMax, 1000, false}, // triggers
 	Axis{5, -AxisMax, AxisMax, 1000, false},
-	Axis{6, -AxisMax, AxisMax, 1000, false}, // dpad
+	Axis{6, -AxisMax, AxisMax, 1000, false}, // directional pad
 	Axis{7, -AxisMax, AxisMax, 1000, false},
 	1 << 4, // bumpers
 	1 << 5,
@@ -103,6 +105,35 @@ var xbox = struct {
 	1 << 7, // start
 	1 << 6, // back
 	1 << 8, // xbox button
+}
+
+// map xbox controller to pan-tilt-zoom controls and misc app controls
+var ptz = struct {
+	// pan tilt zoom
+	PanX      Axis
+	PanY      Axis
+	ZoomIn    uint32
+	ZoomOut   uint32
+	OpenIris  uint32
+	CloseIris uint32
+	OpenMenu  uint32
+
+	// misc
+	IncPelcoAddr uint32
+	DecPelcoAddr uint32
+	ResetTimer   uint32
+}{
+	xbox.LeftAxisX,   // pan x
+	xbox.RightAxisY,  // pan y
+	xbox.LeftBumper,  // zoom in
+	xbox.RightBumper, // zoom out
+	xbox.A,           // open iris (enter)
+	xbox.B,           // close iris
+	xbox.Start,       // open menu
+
+	xbox.Y,    // increment pelco address
+	xbox.X,    // decrement pelco address
+	xbox.Back, // reset timer
 }
 
 func main() {
@@ -241,14 +272,14 @@ func interactive(conf config.Config) {
 			return
 		case state := <-jsObserver:
 			// adjust Pelco address
-			if isPressed(state, xbox.X) {
+			if isPressed(state, ptz.DecPelcoAddr) {
 				limitChange(allowAddressChange, func() { conf.Address -= 1 })
-			} else if isPressed(state, xbox.Y) {
+			} else if isPressed(state, ptz.IncPelcoAddr) {
 				limitChange(allowAddressChange, func() { conf.Address += 1 })
 			}
 
 			// reset the clock if user presses Back
-			if isPressed(state, xbox.Back) {
+			if isPressed(state, ptz.ResetTimer) {
 				startTime = time.Now()
 			}
 
@@ -284,15 +315,15 @@ func isPressed(state joystick.State, mask uint32) bool {
 func joystickToPelco(buffer PelcoDMessage, state joystick.State) PelcoDMessage {
 	var zoom float32
 
-	panX := normalizeAxis(state, xbox.LeftAxisH)
-	panY := normalizeAxis(state, xbox.RightAxisV)
-	openIris := isPressed(state, xbox.A)
-	closeIris := isPressed(state, xbox.B)
-	openMenu := isPressed(state, xbox.Start)
+	panX := normalizeAxis(state, ptz.PanX)
+	panY := normalizeAxis(state, ptz.PanY)
+	openIris := isPressed(state, ptz.OpenIris)
+	closeIris := isPressed(state, ptz.CloseIris)
+	openMenu := isPressed(state, ptz.OpenMenu)
 
-	if isPressed(state, xbox.LeftBumper) {
+	if isPressed(state, ptz.ZoomOut) {
 		zoom = -1.0
-	} else if isPressed(state, xbox.RightBumper) {
+	} else if isPressed(state, ptz.ZoomIn) {
 		zoom = 1.0
 	}
 
