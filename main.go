@@ -204,7 +204,13 @@ func interactive(conf config.Config) {
 		jsObserver = listenJoystick(js, jsTicker)
 	}
 
-	if serialEnabled {
+	serialExists := true
+	if _, err = os.Stat(conf.SerialPort); err != nil {
+		serialExists = false
+		fmt.Fprintf(os.Stderr, "Error opening serial port (%s). %s\n", conf.SerialPort, err)
+	}
+
+	if serialEnabled && serialExists {
 		ttyOptions := serial.Options{
 			Mode:        serial.MODE_WRITE,
 			BitRate:     9600,
