@@ -13,31 +13,6 @@ import (
 	"time"
 )
 
-// Controller Layout
-//
-// Controller                   PelcoD
-// ----------                   ------
-// Left Analog                  Pan w/ Speed
-//   Up                         (unused)
-//   Down                       (unused)
-//   Left                       Left
-//   Right                      Right
-// Right Analog
-//   Up                         Up
-//   Down                       Down
-//   Left                       (unused)
-//   Right                      (unused)
-// A                            Iris Open
-// B                            Iris Close
-// X                            Decrement Address
-// Y                            Increment Address
-// Left Bumper                  Zoom Out
-// Right Bumper                 Zoom In
-// Start                        Menu (Go to Preset 95)
-// Back                         Reset recording start time
-// Left Trigger                 (unused)
-// Right Trigger                (unused)
-
 var (
 	VERSION    string
 	BUILD_DATE string
