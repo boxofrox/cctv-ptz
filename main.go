@@ -18,15 +18,15 @@ import (
 // Controller                   PelcoD
 // ----------                   ------
 // Left Analog                  Pan w/ Speed
-//   Up                         Up
-//   Down                       Down
-//   Left                       (unused)
-//   Right                      (unused)
-// Right Analog
 //   Up                         (unused)
 //   Down                       (unused)
 //   Left                       Left
 //   Right                      Right
+// Right Analog
+//   Up                         Up
+//   Down                       Down
+//   Left                       (unused)
+//   Right                      (unused)
 // A                            Iris Open
 // B                            Iris Close
 // X                            Decrement Address
