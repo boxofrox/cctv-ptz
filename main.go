@@ -145,13 +145,14 @@ func main() {
 	usage := `CCTV Pan-Tilt-Zoom via Xbox Controller
 
 Usage:
-    cctv-ptz [-a ADDRESS] [-s FILE] [-j JOYSTICK] [-r FILE] [-v]
+    cctv-ptz [-v] [-a ADDRESS] [-s FILE] [-j JOYSTICK] [-r FILE] [-b BAUD]
     cctv-ptz playback [-a ADDRESS] [-v]
     cctv-ptz -h
     cctv-ptz -V
 
 Options:
     -a, --address ADDRESS    - Pelco-D address 0-256. (default = 0)
+    -b, --baud BAUD          - set baud rate of serial port. (default = 9600)
     -j, --joystick JOYSTICK  - use joystick NUM (e.g. /dev/input/jsNUM). (default = 0)
     -s, --serial FILE        - assign serial port for rs485 output. (default = /dev/sttyUSB0)
     -r, --record FILE        - record rs485 commands to file. (default = /dev/null)
@@ -213,7 +214,7 @@ func interactive(conf config.Config) {
 	if serialEnabled && serialExists {
 		ttyOptions := serial.Options{
 			Mode:        serial.MODE_WRITE,
-			BitRate:     9600,
+			BitRate:     conf.BaudRate,
 			DataBits:    8,
 			StopBits:    1,
 			Parity:      serial.PARITY_NONE,
