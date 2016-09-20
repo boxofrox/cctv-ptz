@@ -515,6 +515,8 @@ func playback(conf config.Config) {
 		text := lineScanner.Text()
 		words := strings.Fields(text)
 
+		lineCount += 1
+
 		if 3 > len(words) {
 			fmt.Fprintf(os.Stderr, "Error parsing playback. Too few fields.  Line %d: %s\n", lineCount, text)
 			continue
