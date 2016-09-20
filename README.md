@@ -27,11 +27,12 @@ This is an initial implementation.  Not all features are complete.
   - [x] Set serial port baud rate.
   - [x] Select serial port by name/path.
   - [x] Select joystick by number.
+- [x] Record commands to text file.
+- [x] Playback commands from stdin.
 
 ### Todo
 
-- [ ] Record commands to text file.
-- [ ] Playback commands from stdin.
+- [ ] Override playback address with command line option.
 
 ### Wishlist
 
@@ -44,7 +45,7 @@ This is an initial implementation.  Not all features are complete.
 
     Usage:
         cctv-ptz [-v] [-a ADDRESS] [-s FILE] [-j JOYSTICK] [-r FILE] [-b BAUD]
-        cctv-ptz playback [-a ADDRESS] [-v]
+        cctv-ptz playback [-a ADDRESS] [-s FILE] [-b BAUD] [-v]
         cctv-ptz -h
         cctv-ptz -V
 
@@ -97,3 +98,9 @@ This is an initial implementation.  Not all features are complete.
 Find near the top of `main.go` the `ptz struct`.  Modify the initialization
 values to map the controller inputs to commands.  The `xbox struct` defines
 names for the controller inputs.
+
+### Playback notes
+
+The Pelco-D protocol effectively limits playback to a dead-reckoning system.
+Small variations in timing or camera speed will amplify into large errors over
+time.  YMMV.
