@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"encoding/hex"
 	"fmt"
 	"github.com/boxofrox/cctv-ptz/config"
 	"github.com/docopt/docopt-go"
@@ -10,6 +11,8 @@ import (
 	"io"
 	"math"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -30,6 +33,11 @@ const (
 )
 
 type PelcoDMessage [7]byte
+
+type DelayedMessage struct {
+	Message PelcoDMessage
+	Delay   time.Duration
+}
 
 const (
 	AxisMax  = 32767
@@ -119,22 +127,22 @@ func main() {
 
 	usage := `CCTV Pan-Tilt-Zoom via Xbox Controller
 
-Usage:
-    cctv-ptz [-v] [-a ADDRESS] [-s FILE] [-j JOYSTICK] [-r FILE] [-b BAUD]
-    cctv-ptz playback [-a ADDRESS] [-v]
-    cctv-ptz -h
-    cctv-ptz -V
+  Usage:
+  cctv-ptz [-v] [-a ADDRESS] [-s FILE] [-j JOYSTICK] [-r FILE] [-b BAUD]
+  cctv-ptz playback [-a ADDRESS] [-s FILE] [-b BAUD] [-v]
+  cctv-ptz -h
+  cctv-ptz -V
 
-Options:
-    -a, --address ADDRESS    - Pelco-D address 0-256. (default = 0)
-    -b, --baud BAUD          - set baud rate of serial port. (default = 9600)
-    -j, --joystick JOYSTICK  - use joystick NUM (e.g. /dev/input/jsNUM). (default = 0)
-    -s, --serial FILE        - assign serial port for rs485 output. (default = /dev/sttyUSB0)
-    -r, --record FILE        - record rs485 commands to file. (default = /dev/null)
-    -v, --verbose            - prints Pelco-D commands to stdout.
-    -h, --help               - print this help message.
-    -V, --version            - print version info.
-`
+  Options:
+  -a, --address ADDRESS    - Pelco-D address 0-256. (default = 0)
+  -b, --baud BAUD          - set baud rate of serial port. (default = 9600)
+  -j, --joystick JOYSTICK  - use joystick NUM (e.g. /dev/input/jsNUM). (default = 0)
+  -s, --serial FILE        - assign serial port for rs485 output. (default = /dev/sttyUSB0)
+  -r, --record FILE        - record rs485 commands to file. (default = /dev/null)
+  -v, --verbose            - prints Pelco-D commands to stdout.
+  -h, --help               - print this help message.
+  -V, --version            - print version info.
+  `
 
 	arguments, err = docopt.Parse(usage, nil, true, version(), false)
 
@@ -150,6 +158,33 @@ Options:
 	} else {
 		interactive(conf)
 	}
+}
+
+func createSerialOptions(conf config.Config) serial.Options {
+	return serial.Options{
+		Mode:        serial.MODE_WRITE,
+		BitRate:     conf.BaudRate,
+		DataBits:    8,
+		StopBits:    1,
+		Parity:      serial.PARITY_NONE,
+		FlowControl: serial.FLOWCONTROL_NONE,
+	}
+}
+
+func decodeMessage(text string) (PelcoDMessage, error) {
+	var (
+		bytes []byte
+		err   error
+	)
+
+	message := PelcoDMessage{}
+	if bytes, err = hex.DecodeString(text); err != nil {
+		return message, err
+	}
+
+	copy(message[:], bytes)
+
+	return message, nil
 }
 
 func interactive(conf config.Config) {
@@ -180,21 +215,13 @@ func interactive(conf config.Config) {
 		jsObserver = listenJoystick(js, jsTicker)
 	}
 
-	serialExists := true
-	if _, err = os.Stat(conf.SerialPort); err != nil {
-		serialExists = false
+	serialExists := serialPortExists(conf.SerialPort)
+	if !serialExists {
 		fmt.Fprintf(os.Stderr, "Error opening serial port (%s). %s\n", conf.SerialPort, err)
 	}
 
 	if serialEnabled && serialExists {
-		ttyOptions := serial.Options{
-			Mode:        serial.MODE_WRITE,
-			BitRate:     conf.BaudRate,
-			DataBits:    8,
-			StopBits:    1,
-			Parity:      serial.PARITY_NONE,
-			FlowControl: serial.FLOWCONTROL_NONE,
-		}
+		ttyOptions := createSerialOptions(conf)
 
 		tty, err = ttyOptions.Open(conf.SerialPort)
 		if err != nil {
@@ -202,35 +229,7 @@ func interactive(conf config.Config) {
 		}
 		defer tty.Close()
 
-		// print serial port info
-		func() {
-			baud, err := tty.BitRate()
-			if err != nil {
-				panic(err)
-			}
-
-			data, err := tty.DataBits()
-			if err != nil {
-				panic(err)
-			}
-
-			stop, err := tty.StopBits()
-			if err != nil {
-				panic(err)
-			}
-
-			parity, err := tty.Parity()
-			if err != nil {
-				panic(err)
-			}
-
-			fmt.Fprintf(os.Stderr, "Serial port opened. %s\n", conf.SerialPort)
-			fmt.Fprintf(os.Stderr, "        Name: %s\n", tty.Name())
-			fmt.Fprintf(os.Stderr, "   Baud rate: %d\n", baud)
-			fmt.Fprintf(os.Stderr, "   Data bits: %d\n", data)
-			fmt.Fprintf(os.Stderr, "   Stop bits: %d\n", stop)
-			fmt.Fprintf(os.Stderr, "      Parity: %d\n", parity)
-		}()
+		printSerialPortInfo(conf, tty)
 	} else {
 		fmt.Fprintf(os.Stderr, "Serial port disabled\n")
 	}
@@ -466,15 +465,140 @@ func pelcoApplyJoystick(buffer PelcoDMessage, panX, panY, zoom float32, openIris
 }
 
 func playback(conf config.Config) {
-	stdinObserver := listenFile(os.Stdin)
+	var (
+		message       PelcoDMessage
+		tty           *serial.Port
+		millis        uint64
+		err           error
+		serialEnabled = ("/dev/null" != conf.SerialPort)
+	)
 
-	for {
-		select {
-		case bytes := <-stdinObserver:
-			fmt.Printf("%s\n", bytes)
-			return
+	serialExists := serialPortExists(conf.SerialPort)
+	if !serialExists {
+		fmt.Fprintf(os.Stderr, "Error opening serial port (%s). %s\n", conf.SerialPort, err)
+	}
+
+	if serialEnabled && serialExists {
+		ttyOptions := createSerialOptions(conf)
+
+		tty, err = ttyOptions.Open(conf.SerialPort)
+		if err != nil {
+			panic(err)
+		}
+		defer tty.Close()
+
+		printSerialPortInfo(conf, tty)
+	} else {
+		fmt.Fprintf(os.Stderr, "Serial port disabled\n")
+	}
+
+	messageChannel := make(chan DelayedMessage)
+	defer close(messageChannel)
+
+	go sendDelayedMessages(messageChannel, tty, conf.Verbose)
+
+	lineCount := 0
+	lineScanner := bufio.NewScanner(os.Stdin)
+
+	for lineScanner.Scan() {
+		text := lineScanner.Text()
+		words := strings.Fields(text)
+
+		if 3 > len(words) {
+			fmt.Fprintf(os.Stderr, "Error parsing playback. Too few fields.  Line %d: %s\n", lineCount, text)
+			continue
+		}
+
+		if "pelco-d" != words[0] {
+			fmt.Fprintf(os.Stderr, "Error parsing playback. Invalid protocol %s.  Line %d: %s\n", words[0], lineCount, text)
+			continue
+		}
+
+		if message, err = decodeMessage(words[1]); err != nil {
+			fmt.Fprintf(os.Stderr, "Error parsing playback. Invalid packet %s.  Line %d: %s\n", err.Error(), lineCount, text)
+			continue
+		}
+
+		if millis, err = strconv.ParseUint(words[2], 10, 64); err != nil {
+			fmt.Fprintf(os.Stderr, "Error parsing playback. Invalid duration %s.  Line %d: %s\n", err.Error(), lineCount, text)
+			continue
+		}
+
+		messageChannel <- DelayedMessage{message, time.Duration(millis) * time.Millisecond}
+
+		if conf.Verbose {
+			fmt.Fprintf(os.Stderr, "%s\n", text)
 		}
 	}
+}
+
+func printSerialPortInfo(conf config.Config, tty *serial.Port) {
+	baud, err := tty.BitRate()
+	if err != nil {
+		panic(err)
+	}
+
+	data, err := tty.DataBits()
+	if err != nil {
+		panic(err)
+	}
+
+	stop, err := tty.StopBits()
+	if err != nil {
+		panic(err)
+	}
+
+	parity, err := tty.Parity()
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Fprintf(os.Stderr, "Serial port opened. %s\n", conf.SerialPort)
+	fmt.Fprintf(os.Stderr, "        Name: %s\n", tty.Name())
+	fmt.Fprintf(os.Stderr, "   Baud rate: %d\n", baud)
+	fmt.Fprintf(os.Stderr, "   Data bits: %d\n", data)
+	fmt.Fprintf(os.Stderr, "   Stop bits: %d\n", stop)
+	fmt.Fprintf(os.Stderr, "      Parity: %d\n", parity)
+}
+
+func sendMessage(tty *serial.Port, message PelcoDMessage) {
+	if nil != tty {
+		tty.Write(message[:])
+	}
+}
+
+func sendDelayedMessages(c <-chan DelayedMessage, tty *serial.Port, verbose bool) {
+	var (
+		pkg      DelayedMessage
+		lastTime time.Time
+	)
+
+	// send first message without delay
+	pkg = <-c
+	sendMessage(tty, pkg.Message)
+	lastTime = time.Now()
+
+	// all other messages are delayed wrt preceeding messages
+	for pkg = range c {
+		time.Sleep(pkg.Delay)
+		sendMessage(tty, pkg.Message)
+
+		if verbose {
+			duration := time.Now().Sub(lastTime) / 1E6
+			delay := pkg.Delay / 1E6
+			fmt.Fprintf(os.Stderr, "Sent %x after %d millis. target %d millis.  offset %d millis\n",
+				pkg.Message, duration, delay, duration-delay)
+		}
+
+		lastTime = time.Now()
+	}
+}
+
+func serialPortExists(serialPort string) bool {
+	if _, err := os.Stat(serialPort); err != nil {
+		return false
+	}
+	return true
 }
 
 func version() string {
