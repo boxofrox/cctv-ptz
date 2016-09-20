@@ -280,6 +280,7 @@ func interactive(conf config.Config) {
 				if resetTimer {
 					millis = 0
 					resetTimer = false
+					startTime = time.Now()
 				} else {
 					endTime := time.Now()
 					millis = (endTime.Sub(startTime)).Nanoseconds() / 1E6
