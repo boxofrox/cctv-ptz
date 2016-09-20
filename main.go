@@ -193,6 +193,7 @@ func interactive(conf config.Config) {
 		tty           *serial.Port
 		jsObserver    <-chan joystick.State
 		err           error
+		resetTimer    = true
 		serialEnabled = ("/dev/null" != conf.SerialPort)
 	)
 
@@ -265,7 +266,7 @@ func interactive(conf config.Config) {
 
 			// reset the clock if user presses Back
 			if isPressed(state, ptz.ResetTimer) {
-				startTime = time.Now()
+				resetTimer = true
 			}
 
 			message := pelcoCreate()
@@ -274,7 +275,16 @@ func interactive(conf config.Config) {
 			message = pelcoChecksum(message)
 
 			if lastMessage != message {
-				millis := (time.Now().Sub(startTime)).Nanoseconds() / 1E6
+				var millis int64
+
+				if resetTimer {
+					millis = 0
+					resetTimer = false
+				} else {
+					endTime := time.Now()
+					millis = (endTime.Sub(startTime)).Nanoseconds() / 1E6
+					startTime = endTime
+				}
 
 				if conf.Verbose {
 					fmt.Printf("pelco-d %x %d\n", message, millis)
