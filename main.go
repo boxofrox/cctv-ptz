@@ -512,7 +512,12 @@ func playback(conf config.Config) {
 	lineScanner := bufio.NewScanner(os.Stdin)
 
 	for lineScanner.Scan() {
-		text := lineScanner.Text()
+		text := strings.TrimSpace(lineScanner.Text())
+
+		if strings.HasPrefix(text, "#") {
+			continue
+		}
+
 		words := strings.Fields(text)
 
 		lineCount += 1
