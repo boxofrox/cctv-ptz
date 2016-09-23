@@ -105,6 +105,8 @@ var ptz = struct {
 	IncPelcoAddr uint32
 	DecPelcoAddr uint32
 	ResetTimer   uint32
+	MarkLeft     Axis
+	MarkRight    Axis
 }{
 	xbox.LeftAxisX,   // pan x
 	xbox.RightAxisY,  // pan y
@@ -114,9 +116,11 @@ var ptz = struct {
 	xbox.B,           // close iris
 	xbox.Start,       // open menu
 
-	xbox.Y,    // increment pelco address
-	xbox.X,    // decrement pelco address
-	xbox.Back, // reset timer
+	xbox.Y,            // increment pelco address
+	xbox.X,            // decrement pelco address
+	xbox.Back,         // reset timer
+	xbox.LeftTrigger,  // mark
+	xbox.RightTrigger, // mark
 }
 
 func main() {
@@ -269,6 +273,14 @@ func interactive(conf config.Config) {
 				resetTimer = true
 			}
 
+			if isMarkTriggered(state, ptz.MarkLeft) {
+				fmt.Fprintf(record, "# Mark Left\n")
+			}
+
+			if isMarkTriggered(state, ptz.MarkRight) {
+				fmt.Fprintf(record, "# Mark Right\n")
+			}
+
 			message := pelcoCreate()
 			message = pelcoTo(message, conf.Address)
 			message = joystickToPelco(message, state)
@@ -386,6 +398,12 @@ func listenJoystick(js joystick.Joystick, ticker *time.Ticker) <-chan joystick.S
 
 func listenNothing() <-chan joystick.State {
 	return make(chan joystick.State)
+}
+
+func isMarkTriggered(state joystick.State, axis Axis) bool {
+	triggerValue := normalizeAxis(state, axis)
+
+	return 0.5 < triggerValue
 }
 
 func normalizeAxis(state joystick.State, axis Axis) float32 {
