@@ -1,6 +1,6 @@
 .PHONY: all install build
 
-VERSION := 0.1.0
+VERSION := 1.0.0
 BUILD_DATE := $(shell date -u +%Y%m%d.%H%M%S.%3N)
 PKG := github.com/boxofrox/cctv-ptz
 BIN := cctv-ptz

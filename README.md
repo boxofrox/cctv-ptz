@@ -12,7 +12,9 @@ Serial port and joystick libraries are supposed to support all platforms.
 
 # Progress
 
-This is an initial implementation.  Not all features are complete.
+Most features are completed.  However, this program is tailored to/tested
+against a no-name brand of camera I use.  In particular, the *open menu*
+command may vary by manufacturer.
 
 ### Done
 
@@ -44,22 +46,23 @@ This is an initial implementation.  Not all features are complete.
     CCTV Pan-Tilt-Zoom via Xbox Controller
 
     Usage:
-        cctv-ptz [-v] [-a ADDRESS] [-s FILE] [-j JOYSTICK] [-r FILE] [-b BAUD]
-        cctv-ptz playback [-a ADDRESS] [-s FILE] [-b BAUD] [-v]
-        cctv-ptz -h
-        cctv-ptz -V
+      cctv-ptz [-v] [-a ADDRESS] [-s FILE] [-j JOYSTICK] [-r FILE] [-b BAUD] [-m MAXSPEED]
+      cctv-ptz playback [-a ADDRESS] [-s FILE] [-b BAUD] [-v]
+      cctv-ptz -h
+      cctv-ptz -V
 
     Options:
-        -a, --address ADDRESS    - Pelco-D address 0-256. (default = 0)
-        -b, --baud BAUD          - set baud rate of serial port. (default = 9600)
-        -j, --joystick JOYSTICK  - use joystick NUM (e.g. /dev/input/jsNUM). (default = 0)
-        -s, --serial FILE        - assign serial port for rs485 output. (default = /dev/sttyUSB0)
-        -r, --record FILE        - record rs485 commands to file. (default = /dev/null)
-        -v, --verbose            - prints Pelco-D commands to stdout.
-        -h, --help               - print this help message.
-        -V, --version            - print version info.
+      -a, --address ADDRESS    - Pelco-D address 0-256. (default = 0)
+      -b, --baud BAUD          - set baud rate of serial port. (default = 9600)
+      -j, --joystick JOYSTICK  - use joystick NUM (e.g. /dev/input/jsNUM). (default = 0)
+      -m, --maxspeed MAXSPEED  - set max speed setting 0-100. (default = 100)
+      -s, --serial FILE        - assign serial port for rs485 output. (default = /dev/sttyUSB0)
+      -r, --record FILE        - record rs485 commands to file. (default = /dev/null)
+      -v, --verbose            - prints Pelco-D commands to stdout.
+      -h, --help               - print this help message.
+      -V, --version            - print version info.
 
-# Default Mapping
+# Joystick Mapping
 
     Controller Layout
 
@@ -88,8 +91,8 @@ This is an initial implementation.  Not all features are complete.
     Right Bumper                 Zoom In
     Start                        Menu (Go to Preset 95)
     Back                         Reset recording start time
-    Left Trigger                 (unused)
-    Right Trigger                (unused)
+    Left Trigger                 Add a "left" mark to recording file
+    Right Trigger                Add a "right" mark to recording file
 
 # Hacking
 
