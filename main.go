@@ -41,7 +41,7 @@ type DelayedMessage struct {
 
 const (
 	AxisMax  = 32767
-	MaxSpeed = 0x22
+	MaxSpeed = 0x3f
 )
 
 type Axis struct {
@@ -132,7 +132,7 @@ func main() {
 	usage := `CCTV Pan-Tilt-Zoom via Xbox Controller
 
   Usage:
-  cctv-ptz [-v] [-a ADDRESS] [-s FILE] [-j JOYSTICK] [-r FILE] [-b BAUD]
+  cctv-ptz [-v] [-a ADDRESS] [-s FILE] [-j JOYSTICK] [-r FILE] [-b BAUD] [-m MAXSPEED]
   cctv-ptz playback [-a ADDRESS] [-s FILE] [-b BAUD] [-v]
   cctv-ptz -h
   cctv-ptz -V
@@ -141,6 +141,7 @@ func main() {
   -a, --address ADDRESS    - Pelco-D address 0-256. (default = 0)
   -b, --baud BAUD          - set baud rate of serial port. (default = 9600)
   -j, --joystick JOYSTICK  - use joystick NUM (e.g. /dev/input/jsNUM). (default = 0)
+  -m, --maxspeed MAXSPEED  - set max speed setting 0-100. (default = 100)
   -s, --serial FILE        - assign serial port for rs485 output. (default = /dev/sttyUSB0)
   -r, --record FILE        - record rs485 commands to file. (default = /dev/null)
   -v, --verbose            - prints Pelco-D commands to stdout.
@@ -283,7 +284,7 @@ func interactive(conf config.Config) {
 
 			message := pelcoCreate()
 			message = pelcoTo(message, conf.Address)
-			message = joystickToPelco(message, state)
+			message = joystickToPelco(message, state, conf.MaxSpeed)
 			message = pelcoChecksum(message)
 
 			if lastMessage != message {
@@ -320,7 +321,7 @@ func isPressed(state joystick.State, mask uint32) bool {
 	return 0 != state.Buttons&mask
 }
 
-func joystickToPelco(buffer PelcoDMessage, state joystick.State) PelcoDMessage {
+func joystickToPelco(buffer PelcoDMessage, state joystick.State, maxSpeed int32) PelcoDMessage {
 	var zoom float32
 
 	panX := normalizeAxis(state, ptz.PanX)
@@ -335,7 +336,7 @@ func joystickToPelco(buffer PelcoDMessage, state joystick.State) PelcoDMessage {
 		zoom = 1.0
 	}
 
-	buffer = pelcoApplyJoystick(buffer, panX, panY, zoom, openIris, closeIris, openMenu)
+	buffer = pelcoApplyJoystick(buffer, panX, panY, zoom, openIris, closeIris, openMenu, maxSpeed)
 
 	return buffer
 }
@@ -450,7 +451,7 @@ func pelcoTo(buffer PelcoDMessage, addr int) PelcoDMessage {
 	return buffer
 }
 
-func pelcoApplyJoystick(buffer PelcoDMessage, panX, panY, zoom float32, openIris, closeIris, openMenu bool) PelcoDMessage {
+func pelcoApplyJoystick(buffer PelcoDMessage, panX, panY, zoom float32, openIris, closeIris, openMenu bool, maxSpeed int32) PelcoDMessage {
 	if openMenu {
 		buffer[COMMAND_1] = 0x00
 		buffer[COMMAND_2] = 0x03
@@ -467,7 +468,7 @@ func pelcoApplyJoystick(buffer PelcoDMessage, panX, panY, zoom float32, openIris
 	}
 
 	// pan speed
-	buffer[DATA_1] = uint8(float64(MaxSpeed) * math.Abs(float64(panX)))
+	buffer[DATA_1] = uint8(float64(maxSpeed) * math.Abs(float64(panX)))
 
 	if panY > 0 {
 		buffer[COMMAND_2] |= 1 << 3
@@ -476,7 +477,7 @@ func pelcoApplyJoystick(buffer PelcoDMessage, panX, panY, zoom float32, openIris
 	}
 
 	// tilt speed
-	buffer[DATA_2] = uint8(float64(MaxSpeed) * math.Abs(float64(panY)))
+	buffer[DATA_2] = uint8(float64(maxSpeed) * math.Abs(float64(panY)))
 
 	if zoom > 0 {
 		buffer[COMMAND_2] |= 1 << 5
