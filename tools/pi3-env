@@ -1,0 +1,13 @@
+#!/bin/bash
+
+#PATH=$HOME/x-tools/armv8-rpi3-linux-gnueabihf/bin:$PATH
+CC=/home/charetjc/x-tools/armv8-rpi3-linux-gnueabihf/bin/armv8-rpi3-linux-gnueabihf-cc
+GOOS=linux
+GOARCH=arm
+GOARM=7
+CGO_ENABLED=1
+BIN_EXT=".pi3"
+
+export PATH CC GOOS GOARCH GOARM CGO_ENABLED
+
+exec "$@"
