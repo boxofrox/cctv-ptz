@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"github.com/boxofrox/cctv-ptz/config"
 	"github.com/docopt/docopt-go"
@@ -13,6 +14,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -194,19 +196,20 @@ func decodeMessage(text string) (PelcoDMessage, error) {
 
 func interactive(conf config.Config) {
 	var (
-		record        *os.File
-		tty           *serial.Port
-		jsObserver    <-chan joystick.State
-		err           error
-		resetTimer    = true
-		serialEnabled = ("/dev/null" != conf.SerialPort)
+		record          *os.File
+		tty             *serial.Port
+		jsObserver      <-chan joystick.State
+		err             error
+		resetTimer      = true
+		serialEnabled   = ("/dev/null" != conf.SerialPort)
+		hasSerialAccess bool
 	)
 
 	stdinObserver := listenFile(os.Stdin)
 
 	js, err := joystick.Open(conf.JoystickNumber)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error opening joystick %d. %s\n", conf.JoystickNumber, err)
+		fmt.Fprintf(os.Stderr, "cctv-ptz: error opening joystick %d. %s\n", conf.JoystickNumber, err)
 
 		jsObserver = listenNothing()
 	} else {
@@ -221,23 +224,24 @@ func interactive(conf config.Config) {
 		jsObserver = listenJoystick(js, jsTicker)
 	}
 
-	serialExists := serialPortExists(conf.SerialPort)
-	if !serialExists {
-		fmt.Fprintf(os.Stderr, "Error opening serial port (%s). %s\n", conf.SerialPort, err)
+	hasSerialAccess, err = serialPortAvailable(conf.SerialPort)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "cctv-ptz: cannot open serial port (%s). %s\n", conf.SerialPort, err)
 	}
 
-	if serialEnabled && serialExists {
+	if serialEnabled && hasSerialAccess {
 		ttyOptions := createSerialOptions(conf)
 
 		tty, err = ttyOptions.Open(conf.SerialPort)
 		if err != nil {
-			panic(err)
+			fmt.Fprintf(os.Stderr, "cctz-ptz: unable to open tty: %s\n", conf.SerialPort)
+			os.Exit(1)
 		}
 		defer tty.Close()
 
 		printSerialPortInfo(conf, tty)
 	} else {
-		fmt.Fprintf(os.Stderr, "Serial port disabled\n")
+		fmt.Fprintf(os.Stderr, "cctv-ptz: serial port disabled\n")
 	}
 
 	if "-" == conf.RecordFile {
@@ -496,19 +500,20 @@ func pelcoApplyJoystick(buffer PelcoDMessage, panX, panY, zoom float32, openIris
 
 func playback(conf config.Config) {
 	var (
-		message       PelcoDMessage
-		tty           *serial.Port
-		millis        uint64
-		err           error
-		serialEnabled = ("/dev/null" != conf.SerialPort)
+		message         PelcoDMessage
+		tty             *serial.Port
+		millis          uint64
+		err             error
+		serialEnabled   = ("/dev/null" != conf.SerialPort)
+		hasSerialAccess bool
 	)
 
-	serialExists := serialPortExists(conf.SerialPort)
-	if !serialExists {
-		fmt.Fprintf(os.Stderr, "Error opening serial port (%s). %s\n", conf.SerialPort, err)
+	hasSerialAccess, err = serialPortAvailable(conf.SerialPort)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "cctv-ptz: cannot open serial port (%s). %s\n", conf.SerialPort, err)
 	}
 
-	if serialEnabled && serialExists {
+	if serialEnabled && hasSerialAccess {
 		ttyOptions := createSerialOptions(conf)
 
 		tty, err = ttyOptions.Open(conf.SerialPort)
@@ -542,22 +547,22 @@ func playback(conf config.Config) {
 		lineCount += 1
 
 		if 3 > len(words) {
-			fmt.Fprintf(os.Stderr, "Error parsing playback. Too few fields.  Line %d: %s\n", lineCount, text)
+			fmt.Fprintf(os.Stderr, "cctv-ptz: error parsing playback. Too few fields.  Line %d: %s\n", lineCount, text)
 			continue
 		}
 
 		if "pelco-d" != words[0] {
-			fmt.Fprintf(os.Stderr, "Error parsing playback. Invalid protocol %s.  Line %d: %s\n", words[0], lineCount, text)
+			fmt.Fprintf(os.Stderr, "cctv-ptz: error parsing playback. Invalid protocol %s.  Line %d: %s\n", words[0], lineCount, text)
 			continue
 		}
 
 		if message, err = decodeMessage(words[1]); err != nil {
-			fmt.Fprintf(os.Stderr, "Error parsing playback. Invalid packet %s.  Line %d: %s\n", err.Error(), lineCount, text)
+			fmt.Fprintf(os.Stderr, "cctv-ptz: error parsing playback. Invalid packet %s.  Line %d: %s\n", err.Error(), lineCount, text)
 			continue
 		}
 
 		if millis, err = strconv.ParseUint(words[2], 10, 64); err != nil {
-			fmt.Fprintf(os.Stderr, "Error parsing playback. Invalid duration %s.  Line %d: %s\n", err.Error(), lineCount, text)
+			fmt.Fprintf(os.Stderr, "cctv-ptz: error parsing playback. Invalid duration %s.  Line %d: %s\n", err.Error(), lineCount, text)
 			continue
 		}
 
@@ -631,11 +636,50 @@ func sendDelayedMessages(c <-chan DelayedMessage, tty *serial.Port, verbose bool
 	}
 }
 
-func serialPortExists(serialPort string) bool {
-	if _, err := os.Stat(serialPort); err != nil {
-		return false
+func serialPortAvailable(serialPort string) (bool, error) {
+	var err error
+
+	goStat, err := os.Stat(serialPort)
+
+	if os.IsNotExist(err) || os.IsPermission(err) {
+		return false, err
 	}
-	return true
+
+	euid := uint32(os.Geteuid())
+
+	unixStat, ok := goStat.Sys().(*syscall.Stat_t)
+
+	if !ok {
+		return false, errors.New("cannot determine file ownership or permissions")
+	}
+
+	if euid == unixStat.Uid && 0 != (0x600&unixStat.Mode) {
+		// we should have owner access!
+		return true, nil
+	}
+
+	if 0 != (0x006 & unixStat.Mode) {
+		// we should have other access!
+		return true, nil
+	}
+
+	if 0 != (0x060 & unixStat.Mode) {
+		groups, err := os.Getgroups()
+
+		if err != nil {
+			return false, err
+		}
+
+		// does any group for user match file's group?
+		for _, gid := range groups {
+			if uint32(gid) == unixStat.Gid {
+				// we should have group access!
+				return true, nil
+			}
+		}
+	}
+
+	return false, errors.New(fmt.Sprintf("access denied. uid (%d) gid (%d) mode (%o)", unixStat.Uid, unixStat.Gid, 0xfff & unixStat.Mode))
 }
 
 func version() string {

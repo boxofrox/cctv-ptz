@@ -6,7 +6,7 @@ pan-tilt-zoom (PTZ) commands for a closed-circuit-television (CCTV) camera.
 
 # System Requirements
 
-Tested and used on Linux.  Should work on MacOS.  May work on Windows.
+Tested and used on Linux.  Should work on MacOS.  No support for Windows.
 
 Serial port and joystick libraries are supposed to support all platforms.
 
